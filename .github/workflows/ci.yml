@@ -106,9 +106,13 @@ jobs:
         run: |
           pip install pip-audit
           pip install -e .
-          # --skip-editable: the local project itself isn't on PyPI and isn't
-          # a "dependency" to audit — only its resolved third-party deps are.
-          pip-audit --strict --skip-editable
+          # --strict fails on ANY package it can't resolve on an index, which
+          # includes one merely skipped via --skip-editable — so --strict and
+          # --skip-editable actively conflict. Audit a frozen requirements
+          # list with the local (unpublished) package filtered out instead,
+          # keeping --strict meaningful for the actual third-party deps.
+          pip freeze | grep -v '^-e ' | grep -v '^multi-agent-research-backend' > /tmp/frozen-requirements.txt
+          pip-audit --strict -r /tmp/frozen-requirements.txt
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
