@@ -159,6 +159,41 @@ class SessionRepository:
             await self._upsert_session(db, session)
             await db.commit()
 
+    async def mark_running_unless_cancelled(self, session: ResearchSession) -> bool:
+        """Atomically transition to "running" unless the session was already
+        cancelled. Returns whether the write happened.
+
+        `research_service.run()` used to do a plain `get()` then `update()`
+        for this first status write, with a real TOCTOU window in between:
+        `POST /cancel` landing in that window got silently overwritten back
+        to "running" once the background job's write completed. Confirmed
+        by this project's first run against real Postgres (sqlite's
+        `_db_lock` fully serializes reads/writes, so the race never
+        manifested there -- see CHANGELOG Phase 10). `SELECT ... FOR UPDATE`
+        closes the window: a concurrent cancel's write blocks on this row
+        until we commit or roll back, so our read is never stale.
+        """
+        await self._ensure_initialized()
+        if self._db_lock is not None:
+            async with self._db_lock:
+                return await self._mark_running_unless_cancelled(session)
+        return await self._mark_running_unless_cancelled(session)
+
+    async def _mark_running_unless_cancelled(self, session: ResearchSession) -> bool:
+        async with self._sessionmaker() as db:
+            # sqlite has no real row locking and `_db_lock` above already
+            # serializes every read/write against it, so `with_for_update`
+            # is only meaningful (and only supported) against Postgres.
+            row = await db.get(
+                ResearchSessionORM, session.research_id, with_for_update=self._db_lock is None
+            )
+            if row is not None and row.status == "cancelled":
+                await db.rollback()
+                return False
+            await self._upsert_session(db, session)
+            await db.commit()
+            return True
+
     # -- normalized persistence -------------------------------------------------
 
     async def _upsert_session(self, db: AsyncSession, session: ResearchSession) -> None:
@@ -189,6 +224,14 @@ class SessionRepository:
         row.state_snapshot = state.model_dump(mode="json")
         await db.flush()
 
+        # `decision_scores` FK-references `alternatives`/`criteria`, which
+        # `_upsert_plan` below deletes and recreates on every call. Deleting
+        # the *old* decision_scores rows must happen before that, or
+        # `_upsert_plan`'s delete violates the FK against rows a prior
+        # `update()` call already committed. SQLite doesn't enforce FKs by
+        # default, so this ordering bug was invisible until this project's
+        # first run against real Postgres (see CHANGELOG Phase 10).
+        await db.execute(delete(DecisionScoreORM).where(DecisionScoreORM.session_id == session.research_id))
         if state.plan is not None:
             await self._upsert_plan(db, session.research_id, state)
         await self._upsert_sources(db, state)
@@ -198,7 +241,7 @@ class SessionRepository:
         await self._upsert_contradictions(db, session.research_id, state)
         await self._upsert_risks(db, session.research_id, state)
         await self._upsert_assumptions(db, session.research_id, state)
-        await self._upsert_decision_scores(db, session.research_id, state)
+        await self._insert_decision_scores(db, session.research_id, state)
         await self._replace_agent_runs(db, session.research_id, metadata.agent_runs)
         if state.final_report is not None:
             await self._upsert_report(db, session.research_id, state)
@@ -376,12 +419,15 @@ class SessionRepository:
                 )
             )
 
-    async def _upsert_decision_scores(
+    async def _insert_decision_scores(
         self, db: AsyncSession, session_id: UUID, state: ResearchState
     ) -> None:
         if state.decision_matrix is None:
             return
-        await db.execute(delete(DecisionScoreORM).where(DecisionScoreORM.session_id == session_id))
+        # Stale rows for this session were already deleted earlier in
+        # `_upsert_session`, before `_upsert_plan` recreated the
+        # alternatives/criteria this insert looks up (see the comment
+        # there) -- this method only ever inserts.
 
         # `alternatives`/`criteria` rows are recreated per plan update
         # (`_upsert_plan`) with only a `name`, not an agent-stable id; look

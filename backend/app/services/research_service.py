@@ -76,13 +76,14 @@ class ResearchService:
         # Guard against a race with POST .../cancel firing between job
         # dispatch and this first write (see the "best-effort cancellation"
         # note further down): never flip an already-cancelled session back
-        # to "running".
-        existing = await repo.get(research_id)
-        if existing is not None and existing.status == "cancelled":
-            return
-        await repo.update(
+        # to "running". `mark_running_unless_cancelled` makes the
+        # check-then-write atomic (a plain get() + update() had a real
+        # TOCTOU window here -- see its docstring).
+        started = await repo.mark_running_unless_cancelled(
             ResearchSession(research_id=research_id, status="running", state=pending_state)
         )
+        if not started:
+            return
 
         cache_key = _result_cache_key(request, self._llm, self._search) if self._cache else None
         if self._cache is not None and cache_key is not None:
