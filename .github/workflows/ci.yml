@@ -106,7 +106,9 @@ jobs:
         run: |
           pip install pip-audit
           pip install -e .
-          pip-audit --strict
+          # --skip-editable: the local project itself isn't on PyPI and isn't
+          # a "dependency" to audit — only its resolved third-party deps are.
+          pip-audit --strict --skip-editable
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
