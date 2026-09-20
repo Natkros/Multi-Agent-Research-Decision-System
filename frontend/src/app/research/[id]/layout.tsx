@@ -1,15 +1,16 @@
 import { SessionTabs } from "@/features/research-session/SessionTabs";
 
-export default function ResearchSessionLayout({
+export default async function ResearchSessionLayout({
   children,
   params,
 }: {
   children: React.ReactNode;
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
+  const { id } = await params;
   return (
     <div>
-      <SessionTabs researchId={params.id} />
+      <SessionTabs researchId={id} />
       {children}
     </div>
   );

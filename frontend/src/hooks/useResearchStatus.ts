@@ -28,6 +28,11 @@ export function useResearchStatus(
   const [isLoading, setIsLoading] = useState(true);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
+  // Holds the latest `fetchOnce` so the setTimeout callbacks below can call
+  // it without closing over `fetchOnce` itself (a self-reference the React
+  // Compiler-aware lint rules flag, since it can't prove the closure only
+  // runs after the const binding settles).
+  const fetchOnceRef = useRef<() => void>(() => {});
 
   const fetchOnce = useCallback(async () => {
     if (!researchId) return;
@@ -38,16 +43,20 @@ export function useResearchStatus(
       setError(null);
       setIsLoading(false);
       if (!TERMINAL_STATUSES.has(result.status)) {
-        timerRef.current = setTimeout(fetchOnce, intervalMs);
+        timerRef.current = setTimeout(() => fetchOnceRef.current(), intervalMs);
       }
     } catch (err) {
       if (!mountedRef.current) return;
       setError(err instanceof ApiError ? err.message : "Failed to load research status");
       setIsLoading(false);
       // keep polling even on a transient error, in case the backend recovers
-      timerRef.current = setTimeout(fetchOnce, intervalMs * 2);
+      timerRef.current = setTimeout(() => fetchOnceRef.current(), intervalMs * 2);
     }
   }, [researchId, intervalMs]);
+
+  useEffect(() => {
+    fetchOnceRef.current = fetchOnce;
+  }, [fetchOnce]);
 
   useEffect(() => {
     mountedRef.current = true;

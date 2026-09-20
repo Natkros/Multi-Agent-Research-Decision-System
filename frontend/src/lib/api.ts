@@ -83,7 +83,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
     if (response.status === 401 && typeof window !== "undefined") {
       // Expired/invalid/missing token: send the user back to log in rather
-      // than leaving the page stuck on a failed fetch.
+      // than leaving the page stuck on a failed fetch. This is a plain
+      // fetch-wrapper module with no React component tree to call
+      // useRouter() from, so a full navigation via window.location is the
+      // correct primitive here, not a lint-flagged shortcut.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
       window.location.assign("/login");
     }
     throw new ApiError(message, response.status, code);

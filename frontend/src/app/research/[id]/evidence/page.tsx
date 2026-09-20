@@ -1,5 +1,6 @@
 import { EvidenceExplorer } from "@/features/evidence-explorer/EvidenceExplorer";
 
-export default function EvidencePage({ params }: { params: { id: string } }) {
-  return <EvidenceExplorer researchId={params.id} />;
+export default async function EvidencePage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  return <EvidenceExplorer researchId={id} />;
 }
