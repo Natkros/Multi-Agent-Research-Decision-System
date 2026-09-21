@@ -14,6 +14,24 @@ frontend, a 22-question evaluation benchmark, Docker Compose for local
 deployment, and a GitHub Actions CI/CD pipeline. 225 backend tests pass; see
 [CHANGELOG.md](CHANGELOG.md) for the full phase-by-phase build history.
 
+## Screenshots
+
+Dashboard, decision matrix, and agent trace, showing a real completed run of
+the canonical pgvector-vs-managed-vector-DB question:
+
+| | |
+|---|---|
+| ![Dashboard](docs/screenshots/dashboard.png) | ![Decision Matrix](docs/screenshots/decision-matrix.png) |
+| Dashboard — past/in-flight sessions | Decision Matrix — weighted scores + sensitivity analysis |
+| ![Agent Trace](docs/screenshots/agent-trace.png) | ![Evidence Explorer](docs/screenshots/evidence-explorer.png) |
+| Agent Trace — the full 12-stage pipeline execution | Evidence Explorer — every claim's evidence, confidence, source |
+
+Full auditable report (executive summary through sources/citations):
+[docs/screenshots/report.png](docs/screenshots/report.png). New-research
+submission form: [docs/screenshots/new-research.png](docs/screenshots/new-research.png).
+Evaluation dashboard (a real `evaluate_system.py` run):
+[docs/screenshots/evaluation.png](docs/screenshots/evaluation.png).
+
 ## Why multi-agent, and why controlled orchestration
 
 A single LLM call answering "should we build or buy X" produces a
@@ -322,7 +340,7 @@ FastAPI + Pydantic v2 + SQLAlchemy 2 + PostgreSQL backend, LangGraph
 orchestration, provider-agnostic `LLMProvider` (OpenAI/Anthropic/local) and
 `SearchProvider` (Tavily/local) interfaces, Qdrant for hybrid RAG retrieval,
 Redis for caching/rate limiting, a lightweight asyncio job runner for durable
-background execution, Next.js 14 + TypeScript (strict) + Tailwind frontend,
+background execution, Next.js 16 + TypeScript (strict) + Tailwind frontend,
 OpenTelemetry + structured JSON logging, Docker Compose for local
 deployment, GitHub Actions for CI/CD. Full justification:
 [docs/architecture.md](docs/architecture.md) §5.
